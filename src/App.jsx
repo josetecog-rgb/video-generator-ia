@@ -1,63 +1,28 @@
 import React, { useState } from 'react';
-import TopicsPanel from './components/TopicsPanel';
-import ScriptPanel from './components/ScriptPanel';
-import ImagePanel from './components/ImagePanel';
-import VideoPanel from './components/VideoPanel';
+import Pipeline from './components/Pipeline';
 import ProjectsPanel from './components/ProjectsPanel';
 import './App.css';
 
-const TABS = [
-  { id: 'topics', label: '💡 Temas' },
-  { id: 'script', label: '📝 Guión' },
-  { id: 'image', label: '🖼️ Imágenes' },
-  { id: 'video', label: '🎬 Video' },
-  { id: 'projects', label: '📁 Proyectos' },
-];
-
 export default function App() {
-  const [activeTab, setActiveTab] = useState('topics');
-  const [sharedData, setSharedData] = useState({
-    topic: '',
-    platform: 'tiktok',
-    script: null,
-    imageUrl: null,
-  });
+  const [view, setView] = useState('pipeline');
 
   return (
     <div className="app">
       <header className="header">
-        <h1>🎬 Generador de Videos Virales IA</h1>
-        <p>Crea contenido viral para TikTok, YouTube, Instagram y más</p>
+        <div className="header-inner">
+          <h1>🎬 Generador de Videos Virales IA</h1>
+          <nav className="top-nav">
+            <button className={`nav-btn ${view === 'pipeline' ? 'active' : ''}`} onClick={() => setView('pipeline')}>
+              ✨ Crear video
+            </button>
+            <button className={`nav-btn ${view === 'projects' ? 'active' : ''}`} onClick={() => setView('projects')}>
+              📁 Mis proyectos
+            </button>
+          </nav>
+        </div>
       </header>
-
-      <nav className="tabs">
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            className={`tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-
       <main className="content">
-        {activeTab === 'topics' && (
-          <TopicsPanel sharedData={sharedData} setSharedData={setSharedData} />
-        )}
-        {activeTab === 'script' && (
-          <ScriptPanel sharedData={sharedData} setSharedData={setSharedData} />
-        )}
-        {activeTab === 'image' && (
-          <ImagePanel sharedData={sharedData} setSharedData={setSharedData} />
-        )}
-        {activeTab === 'video' && (
-          <VideoPanel sharedData={sharedData} />
-        )}
-        {activeTab === 'projects' && (
-          <ProjectsPanel />
-        )}
+        {view === 'pipeline' ? <Pipeline /> : <ProjectsPanel />}
       </main>
     </div>
   );
