@@ -1,4 +1,4 @@
-const { generateImage } = require('./_services/falai');
+const { generateImage } = require('./_services/hf');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,11 +8,10 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   try {
-    const { prompt, size = 'square_hd' } = req.body;
+    const { prompt, size = 'portrait_16_9' } = req.body;
     if (!prompt) return res.status(400).json({ error: '"prompt" es requerido' });
 
-    const result = await generateImage({ prompt, size });
-    const image_url = result?.images?.[0]?.url || null;
+    const image_url = await generateImage({ prompt, size });
     res.json({ image_url });
   } catch (err) {
     res.status(500).json({ error: 'Error generando imagen', detail: err.message });
