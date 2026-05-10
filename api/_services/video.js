@@ -2,57 +2,69 @@ const axios = require('axios');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function generateWithReplicate({ prompt, image_url }) {
-  const token = process.env.REPLICATE_API_TOKEN;
-  if (!token) throw new Error('REPLICATE_API_TOKEN no configurado');
-
-  // Usar el endpoint de modelo específico (API nueva de Replicate)
-  const model = image_url ? 'wan-ai/wan2.1-i2v-480p' : 'wan-ai/wan2.1-t2v-480p';
-  const input = image_url
-    ? { prompt, image: image_url, max_area: '480*832', fast_mode: 'Balanced', sample_steps: 20 }
-    : { prompt, max_area: '480*832', fast_mode: 'Balanced', sample_steps: 20 };
-
-  const [owner, name] = model.split('/');
+async function replicatePredict({ token, owner, name, input }) {
+  // Crear predicción
   const create = await axios.post(
     `https://api.replicate.com/v1/models/${owner}/${name}/predictions`,
     { input },
     {
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Prefer': 'wait' },
-      timeout: 15000,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 20000,
     }
   );
 
-  const id = create.data.id;
-  if (!id) throw new Error('No se obtuvo ID de predicción');
+  const id = create.data?.id;
+  if (!id) throw new Error(`Sin ID de predicción: ${JSON.stringify(create.data)}`);
 
-  // Polling hasta 270 segundos
-  for (let i = 0; i < 54; i++) {
+  // Polling
+  for (let i = 0; i < 60; i++) {
     await sleep(5000);
     const poll = await axios.get(
       `https://api.replicate.com/v1/predictions/${id}`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
+      { headers: { 'Authorization': `Bearer ${token}` }, timeout: 10000 }
     );
     const { status, output, error } = poll.data;
     if (status === 'succeeded') {
-      const url = Array.isArray(output) ? output[0] : output;
-      if (!url) throw new Error('Sin URL de video en respuesta');
-      return url;
+      return Array.isArray(output) ? output[0] : output;
     }
-    if (status === 'failed' || status === 'canceled') throw new Error(error || `Replicate: ${status}`);
+    if (status === 'failed' || status === 'canceled') {
+      throw new Error(`Replicate ${status}: ${error || 'sin detalles'}`);
+    }
   }
-  throw new Error('Tiempo agotado esperando el video');
+  throw new Error('Timeout: el video tardó más de 5 minutos');
 }
 
 async function generateVideo({ prompt, image_url }) {
-  if (process.env.REPLICATE_API_TOKEN) {
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) throw new Error('Configura REPLICATE_API_TOKEN en Vercel');
+
+  // Intentar modelos en orden — primero imagen-a-video si hay imagen, luego texto-a-video
+  const attempts = image_url
+    ? [
+        // MiniMax Hailuo imagen-a-video
+        { owner: 'minimax', name: 'video-01-live',    input: { prompt, first_frame_image: image_url } },
+        { owner: 'minimax', name: 'video-01',          input: { prompt, first_frame_image: image_url } },
+        // Texto-a-video como fallback
+        { owner: 'minimax', name: 'video-01',          input: { prompt } },
+      ]
+    : [
+        { owner: 'minimax', name: 'video-01',          input: { prompt } },
+        { owner: 'minimax', name: 'video-01-live',     input: { prompt } },
+      ];
+
+  for (const attempt of attempts) {
     try {
-      return { url: await generateWithReplicate({ prompt, image_url }), provider: 'replicate' };
+      const url = await replicatePredict({ token, ...attempt });
+      if (url) return { url, provider: `replicate/${attempt.owner}/${attempt.name}` };
     } catch (e) {
-      console.error('Replicate error:', e.message);
-      throw e;
+      console.error(`Falló ${attempt.owner}/${attempt.name}:`, e.message);
     }
   }
-  throw new Error('Configura REPLICATE_API_TOKEN (gratis en replicate.com)');
+
+  throw new Error('No se pudo generar el video. Verifica que tu cuenta de Replicate tenga créditos disponibles.');
 }
 
 module.exports = { generateVideo };

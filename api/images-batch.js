@@ -7,28 +7,54 @@ const SIZES = {
   'square_hd':      { width: 1024, height: 1024 },
 };
 
-async function generateSingle({ prompt, size = 'portrait_16_9' }) {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function generateSingle({ prompt, size = 'portrait_16_9', retries = 2 }) {
   const { width, height } = SIZES[size] || SIZES['portrait_16_9'];
 
-  // Intenta Together AI
+  // Together AI
   if (process.env.TOGETHER_API_KEY) {
-    try {
-      const res = await axios.post(
-        'https://api.together.xyz/v1/images/generations',
-        { model: 'black-forest-labs/FLUX.1-schnell-Free', prompt, width, height, steps: 4, n: 1, response_format: 'b64_json' },
-        { headers: { 'Authorization': `Bearer ${process.env.TOGETHER_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 50000 }
-      );
-      const b64 = res.data?.data?.[0]?.b64_json;
-      if (b64) return `data:image/jpeg;base64,${b64}`;
-    } catch (e) {
-      console.error('Together falló para esta imagen:', e.response?.status, e.message);
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const res = await axios.post(
+          'https://api.together.xyz/v1/images/generations',
+          {
+            model: 'black-forest-labs/FLUX.1-schnell-Free',
+            prompt,
+            width,
+            height,
+            steps: 4,
+            n: 1,
+            response_format: 'b64_json',
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${process.env.TOGETHER_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 55000,
+          }
+        );
+        const b64 = res.data?.data?.[0]?.b64_json;
+        if (b64) return `data:image/jpeg;base64,${b64}`;
+      } catch (e) {
+        if (attempt < retries) {
+          await sleep(e.response?.status === 429 ? 8000 : 3000);
+        } else {
+          console.error(`Together AI falló después de ${retries} intentos:`, e.response?.status);
+        }
+      }
     }
   }
 
-  // Fallback Pollinations
+  // Fallback: Pollinations
   const encoded = encodeURIComponent(prompt);
   const url = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&seed=${Math.floor(Math.random() * 99999)}`;
-  const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 65000, headers: { 'User-Agent': 'video-generator-ia/1.0' } });
+  const res = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: 65000,
+    headers: { 'User-Agent': 'video-generator-ia/1.0' },
+  });
   return `data:${res.headers['content-type'] || 'image/jpeg'};base64,${Buffer.from(res.data).toString('base64')}`;
 }
 
@@ -44,7 +70,7 @@ module.exports = async (req, res) => {
     if (!scenes?.length) return res.status(400).json({ error: '"scenes" es requerido' });
 
     // Construir todos los prompts
-    const prompts = scenes.map((scene, i) => ({
+    const items = scenes.map((scene, i) => ({
       prompt: buildImagePrompt({
         sceneDescription: scene.description,
         action: scene.action || '',
@@ -56,16 +82,18 @@ module.exports = async (req, res) => {
       description: scene.description,
     }));
 
-    // Generar TODAS en paralelo con Promise.allSettled
+    // Escalonar el inicio de cada request 3 segundos — evita rate limit
+    // pero corren en paralelo (no secuencial)
     const results = await Promise.allSettled(
-      prompts.map(({ prompt }) => generateSingle({ prompt, size }))
+      items.map(({ prompt, description }, i) =>
+        sleep(i * 3000).then(() => generateSingle({ prompt, size }))
+      )
     );
 
     const images = results.map((r, i) => ({
       url: r.status === 'fulfilled' ? r.value : null,
-      prompt_used: prompts[i].prompt,
-      description: prompts[i].description,
-      error: r.status === 'rejected' ? r.reason?.message : null,
+      prompt_used: items[i].prompt,
+      description: items[i].description,
     }));
 
     res.json({ images, total: images.length, success: images.filter(i => i.url).length });
