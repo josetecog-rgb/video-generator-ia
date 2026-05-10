@@ -8,13 +8,12 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   try {
-    const { prompt, width = 1024, height = 1024, model = 'fal-ai/flux/schnell' } = req.body;
-    if (!prompt) return res.status(400).json({ error: 'El campo "prompt" es requerido' });
+    const { prompt, size = 'square_hd' } = req.body;
+    if (!prompt) return res.status(400).json({ error: '"prompt" es requerido' });
 
-    const result = await generateImage({ prompt, width, height, model });
-    const image_url = result?.images?.[0]?.url || result?.image?.url || null;
-
-    res.json({ image_url, raw: result });
+    const result = await generateImage({ prompt, size });
+    const image_url = result?.images?.[0]?.url || null;
+    res.json({ image_url });
   } catch (err) {
     res.status(500).json({ error: 'Error generando imagen', detail: err.message });
   }

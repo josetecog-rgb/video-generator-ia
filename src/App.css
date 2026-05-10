@@ -154,6 +154,12 @@ select option { background: #fff; }
 .repeat-banner h3 { font-size: 0.95rem; margin-bottom: 12px; color: var(--accent); font-weight: 700; }
 .repeat-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* Caption boxes */
+.caption-box { background: var(--bg3); border: 2px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; position: relative; }
+.caption-label { font-size: 0.73rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 8px; }
+.caption-text { font-size: 0.92rem; line-height: 1.6; color: var(--text); }
+.caption-copy { margin-top: 10px; }
+
 /* Projects */
 .project-card { background: var(--bg2); border: 2px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.05); transition: box-shadow 0.2s; }
 .project-card:hover { box-shadow: 0 4px 16px rgba(108,43,217,0.1); border-color: #d8b4fe; }

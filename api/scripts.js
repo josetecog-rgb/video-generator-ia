@@ -8,31 +8,36 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   try {
-    const { topic, platform = 'tiktok', duration = 60 } = req.body;
-    if (!topic) return res.status(400).json({ error: 'El campo "topic" es requerido' });
+    const { category, genre, platform = 'tiktok' } = req.body;
+    if (!category || !genre) return res.status(400).json({ error: 'category y genre son requeridos' });
 
-    const prompt = `Crea un guión para un video corto de ${duration} segundos para ${platform}.
-Tema: "${topic}"
-Idioma: español
+    const prompt = `Eres un guionista creativo de videos cortos virales.
 
-El guión debe incluir hook (primeros 3 segundos), desarrollo y CTA final.
+Crea una HISTORIA corta y emocionante para un video de 60 segundos en ${platform}.
+Categoría: ${category}
+Género: ${genre}
 
-Responde SOLO con un JSON con esta estructura:
+La historia debe ser original, con inicio, nudo y desenlace sorprendente.
+
+Responde ÚNICAMENTE con este JSON (sin texto extra, sin markdown):
 {
-  "hook": "...",
-  "development": "...",
-  "cta": "...",
-  "full_script": "...",
-  "estimated_duration": ${duration},
-  "image_prompts": ["prompt en inglés para imagen 1", "prompt para imagen 2"]
+  "title": "Título llamativo de la historia",
+  "hook": "Las primeras 2 oraciones que enganchan al espectador en 3 segundos",
+  "story": "La historia completa narrada en 150-200 palabras, emocionante y con giro final",
+  "scenes": [
+    { "description": "Descripción visual de la escena 1 (qué se ve en pantalla)", "image_prompt": "cinematic scene, [describe in English what to show visually], high quality, dramatic lighting" },
+    { "description": "Descripción visual de la escena 2", "image_prompt": "cinematic scene, [describe in English], high quality" },
+    { "description": "Descripción visual de la escena 3 (desenlace)", "image_prompt": "cinematic scene, [describe in English], high quality, emotional" }
+  ],
+  "cta": "Llamada a la acción final (máx 1 oración)"
 }`;
 
-    const raw = await chat([{ role: 'user', content: prompt }], { temperature: 0.8 });
+    const raw = await chat([{ role: 'user', content: prompt }], { temperature: 0.9, max_tokens: 1500 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    const script = jsonMatch ? JSON.parse(jsonMatch[0]) : { full_script: raw };
-
-    res.json({ script, topic, platform });
+    if (!jsonMatch) return res.status(500).json({ error: 'Error parseando respuesta de IA', raw });
+    const script = JSON.parse(jsonMatch[0]);
+    res.json({ script });
   } catch (err) {
-    res.status(500).json({ error: 'Error generando guión', detail: err.message });
+    res.status(500).json({ error: 'Error generando historia', detail: err.message });
   }
 };

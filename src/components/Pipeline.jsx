@@ -1,130 +1,135 @@
-import React, { useState, useEffect } from 'react';
-import { generateTopics, generateScript, generateImage, generateVideo, saveProject } from '../api';
+import React, { useState } from 'react';
+import { generateScript, generateImage, generateVideo, generateCaption } from '../api';
 
 const PLATFORMS = [
-  { id: 'tiktok', label: '🎵 TikTok' },
-  { id: 'youtube', label: '▶️ YouTube' },
+  { id: 'tiktok',    label: '🎵 TikTok' },
+  { id: 'youtube',   label: '▶️ YouTube' },
   { id: 'instagram', label: '📸 Instagram' },
-  { id: 'facebook', label: '👥 Facebook' },
-  { id: 'telegram', label: '✈️ Telegram' },
-  { id: 'whatsapp', label: '💬 WhatsApp' },
+  { id: 'facebook',  label: '👥 Facebook' },
+  { id: 'telegram',  label: '✈️ Telegram' },
+  { id: 'whatsapp',  label: '💬 WhatsApp' },
 ];
 
-const STEP = { PLATFORM: 0, TOPICS: 1, SCRIPT: 2, IMAGES: 3, VIDEO: 4, DONE: 5 };
+const GENRES = [
+  { id: 'Terror',       label: '👻 Terror' },
+  { id: 'Suspenso',     label: '🔍 Suspenso' },
+  { id: 'Acción',       label: '💥 Acción' },
+  { id: 'Comedia',      label: '😂 Comedia' },
+  { id: 'Romance',      label: '💕 Romance' },
+  { id: 'Drama',        label: '😢 Drama' },
+  { id: 'Motivacional', label: '💪 Motivacional' },
+  { id: 'Misterio',     label: '🌀 Misterio' },
+];
 
-const initialState = () => ({
-  platform: '', niche: '', topics: [], topic: '',
+const STEP = { CONFIG: 0, SCRIPT: 1, IMAGES: 2, VIDEO: 3, CAPTION: 4 };
+
+const init = () => ({
+  platform: '', category: '', genre: '',
   script: null, images: [], imagesDone: false,
-  video: null, step: STEP.PLATFORM, loading: false, error: '',
+  video: null, caption: null,
+  step: STEP.CONFIG,
+  loading: false, loadingMsg: '', error: '',
 });
 
 export default function Pipeline() {
-  const [state, setState] = useState(initialState());
-  const set = (patch) => setState(prev => ({ ...prev, ...patch }));
+  const [s, setS] = useState(init());
+  const set = (p) => setS(prev => ({ ...prev, ...p }));
 
-  // Auto-genera guión al seleccionar tema
-  useEffect(() => {
-    if (state.topic && state.step === STEP.TOPICS) runScript();
-  }, [state.topic]);
-
-  // Auto-genera imágenes cuando el guión está listo
-  useEffect(() => {
-    if (state.script && state.step === STEP.SCRIPT) runImages();
-  }, [state.script]);
-
-  async function runTopics() {
-    if (!state.platform) return set({ error: 'Elige una plataforma' });
-    if (!state.niche.trim()) return set({ error: 'Escribe el tema o nicho' });
-    set({ loading: true, error: '', topics: [], topic: '', script: null, images: [], imagesDone: false, video: null });
-    try {
-      const res = await generateTopics({ platform: state.platform, niche: state.niche, count: 6 });
-      set({ topics: res.data.topics || [], step: STEP.TOPICS, loading: false });
-    } catch (e) {
-      set({ error: e.response?.data?.error || 'Error generando ideas', loading: false });
-    }
-  }
-
+  /* ── PASO 1: Generar historia ── */
   async function runScript() {
-    set({ loading: true, error: '' });
+    if (!s.platform) return set({ error: 'Elige una plataforma' });
+    if (!s.category.trim()) return set({ error: 'Escribe la categoría' });
+    if (!s.genre) return set({ error: 'Elige un género' });
+    set({ loading: true, loadingMsg: 'Escribiendo la historia...', error: '', script: null, images: [], imagesDone: false, video: null, caption: null });
     try {
-      const res = await generateScript({ topic: state.topic, platform: state.platform, duration: 60 });
-      set({ script: res.data.script, step: STEP.SCRIPT, loading: false });
+      const res = await generateScript({ category: s.category, genre: s.genre, platform: s.platform });
+      set({ script: res.data.script, step: STEP.SCRIPT, loading: false, loadingMsg: '' });
     } catch (e) {
-      set({ error: e.response?.data?.error || 'Error generando guión', loading: false });
+      set({ error: e.response?.data?.error || 'Error generando historia', loading: false, loadingMsg: '' });
     }
   }
 
+  /* ── PASO 2: Generar imágenes de las escenas ── */
   async function runImages() {
-    const prompts = state.script?.image_prompts || [];
-    // Solo generamos 1 imagen para evitar timeouts
-    const prompt = prompts[0];
-    if (!prompt) {
-      set({ imagesDone: true, step: STEP.IMAGES });
-      return;
-    }
-    set({ loading: true, error: '' });
-    try {
-      const res = await generateImage({ prompt, width: 1024, height: 1024 });
-      const url = res.data.image_url;
-      const images = url ? [{ url, prompt }] : [];
-      set({ images, imagesDone: true, step: STEP.IMAGES, loading: false });
-    } catch (e) {
-      // Si falla, igual avanzamos al paso de imágenes para no bloquear
-      set({ images: [], imagesDone: true, step: STEP.IMAGES, loading: false, error: 'Las imágenes no se pudieron generar — puedes igual generar el video.' });
-    }
-  }
-
-  async function runVideo() {
-    set({ loading: true, error: '', step: STEP.VIDEO });
-    try {
-      const prompt = state.script?.hook || state.topic;
-      const image_url = state.images[0]?.url;
-      const res = await generateVideo({
-        prompt,
-        image_url,
-        duration: 5,
-        model: image_url
-          ? 'fal-ai/kling-video/v1/standard/image-to-video'
-          : 'fal-ai/kling-video/v1/standard/text-to-video',
-      });
-      const videoUrl = res.data.result?.video?.url || res.data.result?.video_url || null;
-      set({ video: videoUrl, step: STEP.DONE, loading: false });
+    const scenes = s.script?.scenes || [];
+    set({ loading: true, loadingMsg: 'Generando imágenes de las escenas...', error: '' });
+    const results = [];
+    for (const scene of scenes.slice(0, 3)) {
       try {
-        await saveProject({
-          title: state.topic, platform: state.platform, niche: state.niche,
-          topic: state.topic, script: state.script, images: state.images,
-          video: { url: videoUrl, status: 'ready' }, status: 'ready',
-        });
-      } catch (_) {}
+        const res = await generateImage({ prompt: scene.image_prompt, size: 'portrait_16_9' });
+        results.push({ url: res.data.image_url, description: scene.description });
+      } catch {
+        results.push({ url: null, description: scene.description });
+      }
+    }
+    set({ images: results, imagesDone: true, step: STEP.IMAGES, loading: false, loadingMsg: '' });
+  }
+
+  /* ── PASO 3: Generar video ── */
+  async function runVideo() {
+    set({ loading: true, loadingMsg: 'Generando video con IA (puede tardar 3-5 min)...', error: '', step: STEP.VIDEO });
+    try {
+      const prompt = s.script?.hook || s.script?.title || s.category;
+      const image_url = s.images.find(i => i.url)?.url;
+      const res = await generateVideo({ prompt, image_url, duration: 5 });
+      const videoUrl = res.data.result?.video?.url || res.data.result?.video_url || null;
+      set({ video: videoUrl, loading: false, loadingMsg: '' });
+      // Auto-genera caption después del video
+      await runCaption(videoUrl);
     } catch (e) {
-      set({ error: e.response?.data?.error || 'Error generando video', loading: false, step: STEP.IMAGES });
+      set({ error: e.response?.data?.error || 'Error generando video. Intenta de nuevo.', loading: false, loadingMsg: '', step: STEP.IMAGES });
     }
   }
 
-  const s = state;
+  /* ── PASO 4: Generar caption ── */
+  async function runCaption(videoUrl) {
+    try {
+      const res = await generateCaption({
+        title: s.script?.title,
+        genre: s.genre,
+        category: s.category,
+        platform: s.platform,
+      });
+      setS(prev => ({ ...prev, caption: res.data, video: videoUrl || prev.video, step: STEP.CAPTION, loading: false, loadingMsg: '' }));
+    } catch {
+      setS(prev => ({ ...prev, step: STEP.CAPTION, loading: false, loadingMsg: '' }));
+    }
+  }
 
+  async function runCaptionOnly() {
+    set({ loading: true, loadingMsg: 'Generando texto de publicación...', error: '' });
+    await runCaption(s.video);
+  }
+
+  function copyText(text) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+
+  function reset() { setS(init()); }
+
+  /* ─────────────── RENDER ─────────────── */
   return (
     <div className="pipeline">
 
-      {/* PASO 1 — Plataforma y nicho */}
-      <div className={`step ${s.step === STEP.PLATFORM ? 'active' : s.step > STEP.PLATFORM ? 'done' : ''}`}>
+      {/* ── PASO 1: Configuración ── */}
+      <div className={`step ${s.step === STEP.CONFIG ? 'active' : 'done'}`}>
         <div className="step-header">
-          <div className="step-num">{s.step > STEP.PLATFORM ? '✓' : '1'}</div>
+          <div className="step-num">{s.step > STEP.CONFIG ? '✓' : '1'}</div>
           <div>
-            <div className="step-title">Plataforma y tema</div>
+            <div className="step-title">Configurar video</div>
             <div className="step-subtitle">
-              {s.platform && s.niche ? `${s.platform.toUpperCase()} · ${s.niche}` : 'Elige dónde publicar y sobre qué'}
+              {s.script
+                ? `${s.platform.toUpperCase()} · ${s.category} · ${s.genre}`
+                : 'Plataforma, categoría y género de la historia'}
             </div>
           </div>
-          {s.step > STEP.PLATFORM && (
-            <button className="btn btn-ghost btn-sm step-badge" onClick={() => setState(initialState())}>Cambiar</button>
-          )}
+          {s.script && <button className="btn btn-ghost btn-sm step-badge" onClick={reset}>Cambiar</button>}
         </div>
 
-        {s.step === STEP.PLATFORM && (
+        {!s.script && (
           <div className="step-body">
             <div className="form-group">
-              <label>Plataforma destino</label>
+              <label>Plataforma de publicación</label>
               <div className="platform-grid">
                 {PLATFORMS.map(p => (
                   <button key={p.id} className={`platform-pill ${s.platform === p.id ? 'active' : ''}`}
@@ -134,193 +139,252 @@ export default function Pipeline() {
                 ))}
               </div>
             </div>
+
             <div className="form-group">
-              <label>Nicho / Categoría</label>
-              <input value={s.niche} onChange={e => set({ niche: e.target.value, error: '' })}
-                placeholder="Ej: finanzas personales, fitness, cocina, tecnología..."
-                onKeyDown={e => e.key === 'Enter' && runTopics()} />
+              <label>Categoría / Nicho</label>
+              <input value={s.category} onChange={e => set({ category: e.target.value, error: '' })}
+                placeholder="Ej: fitness, finanzas, cocina, tecnología, deportes..." />
             </div>
+
+            <div className="form-group">
+              <label>Género de la historia</label>
+              <div className="platform-grid">
+                {GENRES.map(g => (
+                  <button key={g.id} className={`platform-pill ${s.genre === g.id ? 'active' : ''}`}
+                    onClick={() => set({ genre: g.id, error: '' })}>
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {s.error && <div className="error-msg">{s.error}</div>}
-            <button className="btn btn-primary" onClick={runTopics} disabled={s.loading}>
-              {s.loading ? <><span className="spinner" /> Generando ideas...</> : '✨ Generar ideas de temas'}
+
+            <button className="btn btn-primary" onClick={runScript} disabled={s.loading}>
+              {s.loading
+                ? <><span className="spinner" />{s.loadingMsg}</>
+                : '✨ Generar historia'}
             </button>
           </div>
         )}
       </div>
 
-      {/* PASO 2 — Elegir tema */}
-      {s.step >= STEP.TOPICS && (
-        <div className={`step ${!s.topic ? 'active' : 'done'}`}>
+      {/* ── PASO 2: Historia / Guión ── */}
+      {s.script && (
+        <div className={`step ${s.step === STEP.SCRIPT ? 'active' : 'done'}`}>
           <div className="step-header">
-            <div className="step-num">{s.topic ? '✓' : '2'}</div>
+            <div className="step-num">{s.step > STEP.SCRIPT ? '✓' : '2'}</div>
             <div>
-              <div className="step-title">Elige un tema</div>
-              <div className="step-subtitle">{s.topic || 'Haz clic en la idea que más te guste'}</div>
+              <div className="step-title">Historia generada</div>
+              <div className="step-subtitle">{s.script.title}</div>
             </div>
-            {s.topic && <span className="step-badge">✅ Seleccionado</span>}
+            <span className="step-badge">✅ Lista</span>
           </div>
 
-          {!s.topic && (
-            <div className="step-body">
-              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: 10 }}>
-                Al seleccionar un tema, el guión, imágenes y video se generan solos.
-              </p>
-              <div className="topic-list">
-                {s.topics.map((t, i) => (
-                  <div key={i} className="topic-item" onClick={() => set({ topic: t, step: STEP.TOPICS })}>
-                    <span>{t}</span>
-                    <span>→ Usar este</span>
+          <div className="step-body">
+            <div className="script-section hook">
+              <strong>🎣 Hook — primeros 3 segundos</strong>
+              <p>{s.script.hook}</p>
+            </div>
+            <div className="script-section dev">
+              <strong>📖 Historia completa</strong>
+              <p>{s.script.story}</p>
+            </div>
+            {s.script.scenes?.length > 0 && (
+              <div className="script-section" style={{ borderLeftColor: '#00b4d8', background: '#f0faff' }}>
+                <strong>🎬 Escenas ({s.script.scenes.length})</strong>
+                {s.script.scenes.map((sc, i) => (
+                  <p key={i} style={{ marginTop: 6 }}><strong>{i + 1}.</strong> {sc.description}</p>
+                ))}
+              </div>
+            )}
+            <div className="script-section cta">
+              <strong>🚀 CTA</strong>
+              <p>{s.script.cta}</p>
+            </div>
+
+            {s.step === STEP.SCRIPT && !s.loading && (
+              <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={runImages}>
+                🖼️ Generar imágenes de las escenas
+              </button>
+            )}
+            {s.loading && s.step === STEP.SCRIPT && (
+              <div className="loading-bar" style={{ marginTop: 14 }}>
+                <span className="spinner" />{s.loadingMsg}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── PASO 3: Imágenes ── */}
+      {s.imagesDone && (
+        <div className={`step ${s.step === STEP.IMAGES ? 'active' : 'done'}`}>
+          <div className="step-header">
+            <div className="step-num">{s.step > STEP.IMAGES ? '✓' : '3'}</div>
+            <div>
+              <div className="step-title">Imágenes de escenas</div>
+              <div className="step-subtitle">
+                {s.images.filter(i => i.url).length} de {s.images.length} generadas
+              </div>
+            </div>
+            {s.step > STEP.IMAGES && <span className="step-badge">✅ Listas</span>}
+          </div>
+
+          <div className="step-body">
+            {s.images.length > 0 && (
+              <div className="image-grid">
+                {s.images.map((img, i) => (
+                  <div key={i} className="image-card">
+                    {img.url
+                      ? <img src={img.url} alt={`Escena ${i + 1}`} />
+                      : <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem', padding: 12, textAlign: 'center' }}>
+                          No se pudo generar
+                        </div>
+                    }
+                    <div className="image-card-footer" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: '6px 10px' }}>
+                      Escena {i + 1}
+                      {img.url && <a href={img.url} download className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto', padding: '3px 8px' }}>⬇️</a>}
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
 
-      {/* PASO 3 — Guión */}
-      {s.topic && (
-        <div className={`step ${s.script ? 'done' : 'active'}`}>
-          <div className="step-header">
-            <div className="step-num">{s.script ? '✓' : '3'}</div>
-            <div>
-              <div className="step-title">Guión</div>
-              <div className="step-subtitle">
-                {s.script ? 'Hook + desarrollo + CTA' : 'Generando guión automáticamente...'}
-              </div>
-            </div>
-            {s.script && <span className="step-badge">✅ Listo</span>}
-          </div>
-
-          {!s.script && (
-            <div className="step-body">
-              <div className="loading-bar"><span className="spinner" /> Escribiendo el guión con DeepSeek...</div>
-            </div>
-          )}
-
-          {s.script && (
-            <div className="step-body">
-              <div className="script-section hook">
-                <strong>🎣 Hook — primeros 3 segundos</strong>
-                <p>{s.script.hook}</p>
-              </div>
-              <div className="script-section dev">
-                <strong>📖 Desarrollo</strong>
-                <p>{s.script.development}</p>
-              </div>
-              <div className="script-section cta">
-                <strong>🚀 Llamada a la acción</strong>
-                <p>{s.script.cta}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* PASO 4 — Imágenes */}
-      {s.script && (
-        <div className={`step ${s.imagesDone ? (s.images.length ? 'done' : 'active') : 'active'}`}>
-          <div className="step-header">
-            <div className="step-num">{s.images.length ? '✓' : '4'}</div>
-            <div>
-              <div className="step-title">Imagen</div>
-              <div className="step-subtitle">
-                {s.imagesDone
-                  ? (s.images.length ? 'Imagen generada con FLUX' : 'No se pudo generar — puedes continuar igual')
-                  : 'Generando imagen con FLUX...'}
-              </div>
-            </div>
-            {s.images.length > 0 && <span className="step-badge">✅ Lista</span>}
-          </div>
-
-          {!s.imagesDone && (
-            <div className="step-body">
-              <div className="loading-bar"><span className="spinner" /> Generando imagen con FLUX AI...</div>
-            </div>
-          )}
-
-          {s.imagesDone && (
-            <div className="step-body">
-              {s.images.length > 0 && (
-                <div className="image-grid">
-                  {s.images.map((img, i) => (
-                    <div key={i} className="image-card">
-                      <img src={img.url} alt={`Imagen ${i + 1}`} />
-                      <div className="image-card-footer">
-                        <a href={img.url} download className="btn btn-ghost btn-sm">⬇️ Descargar</a>
-                        <a href={img.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">🔗 Ver</a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {s.error && <div className="error-msg" style={{ marginBottom: 12 }}>{s.error}</div>}
-
-              {s.step === STEP.IMAGES && !s.loading && !s.video && (
-                <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={runVideo}>
-                  🎬 Generar video
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* PASO 5 — Video */}
-      {s.step >= STEP.VIDEO && (
-        <div className={`step ${s.video ? 'done' : 'active'}`}>
-          <div className="step-header">
-            <div className="step-num">{s.video ? '✓' : '5'}</div>
-            <div>
-              <div className="step-title">Video</div>
-              <div className="step-subtitle">
-                {s.video ? 'Video generado y listo' : 'Generando video con Kling AI (2-4 min)...'}
-              </div>
-            </div>
-            {s.video && <span className="step-badge">✅ Listo</span>}
-          </div>
-
-          {s.loading && !s.video && (
-            <div className="step-body">
-              <div className="loading-bar"><span className="spinner" /> Generando video con Kling AI... (puede tardar 2-4 min)</div>
-            </div>
-          )}
-
-          {s.video && (
-            <div className="step-body">
-              <div className="video-wrap">
-                <video controls><source src={s.video} /></video>
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <a href={s.video} download className="btn btn-ghost btn-sm">⬇️ Descargar</a>
-                <a href={s.video} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">🔗 Abrir</a>
-              </div>
-            </div>
-          )}
-
-          {s.error && s.step === STEP.IMAGES && (
-            <div className="step-body">
-              <div className="error-msg">{s.error}</div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Repetir para otras plataformas */}
-      {s.step === STEP.DONE && (
-        <div className="repeat-banner">
-          <h3>🎉 ¡Guardado en Proyectos! ¿Repetir para otra plataforma?</h3>
-          <div className="repeat-grid">
-            {PLATFORMS.filter(p => p.id !== s.platform).map(p => (
-              <button key={p.id} className="platform-pill"
-                onClick={() => setState({ ...initialState(), platform: p.id, niche: s.niche })}>
-                {p.label}
+            {s.step === STEP.IMAGES && !s.loading && (
+              <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={runVideo}>
+                🎬 Generar video
               </button>
-            ))}
-            <button className="btn btn-ghost btn-sm" onClick={() => setState(initialState())}>
-              🔄 Empezar desde cero
-            </button>
+            )}
+            {s.loading && s.step === STEP.VIDEO && (
+              <div className="loading-bar" style={{ marginTop: 14 }}>
+                <span className="spinner" />{s.loadingMsg}
+              </div>
+            )}
+            {s.error && s.step === STEP.IMAGES && (
+              <div className="error-msg" style={{ marginTop: 12 }}>{s.error}
+                <button className="btn btn-ghost btn-sm" style={{ marginLeft: 10 }} onClick={runVideo}>Reintentar</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Loading mientras genera imágenes */}
+      {s.loading && s.step === STEP.SCRIPT && s.loadingMsg.includes('imágenes') && (
+        <div className="step active">
+          <div className="step-header">
+            <div className="step-num">3</div>
+            <div><div className="step-title">Imágenes</div></div>
+          </div>
+          <div className="step-body">
+            <div className="loading-bar"><span className="spinner" />{s.loadingMsg}</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PASO 4: Video ── */}
+      {s.video && (
+        <div className={`step ${s.step === STEP.CAPTION ? 'done' : 'active'}`}>
+          <div className="step-header">
+            <div className="step-num">{s.step === STEP.CAPTION ? '✓' : '4'}</div>
+            <div><div className="step-title">Video</div><div className="step-subtitle">Generado con IA</div></div>
+            <span className="step-badge">✅ Listo</span>
+          </div>
+          <div className="step-body">
+            <div className="video-wrap">
+              <video controls><source src={s.video} /></video>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <a href={s.video} download className="btn btn-ghost btn-sm">⬇️ Descargar</a>
+              <a href={s.video} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">🔗 Abrir</a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading video */}
+      {s.loading && s.step === STEP.VIDEO && !s.video && (
+        <div className="step active">
+          <div className="step-header">
+            <div className="step-num">4</div>
+            <div><div className="step-title">Video</div><div className="step-subtitle">Generando...</div></div>
+          </div>
+          <div className="step-body">
+            <div className="loading-bar"><span className="spinner" />{s.loadingMsg}</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PASO 5: Caption para publicar ── */}
+      {s.step === STEP.CAPTION && (
+        <div className="step active">
+          <div className="step-header">
+            <div className="step-num">5</div>
+            <div>
+              <div className="step-title">Texto para publicar en {s.platform.toUpperCase()}</div>
+              <div className="step-subtitle">Copia y pega directamente en la plataforma</div>
+            </div>
+            <span className="step-badge">✅ Listo</span>
+          </div>
+
+          <div className="step-body">
+            {s.loading && <div className="loading-bar"><span className="spinner" />Generando texto...</div>}
+
+            {s.caption && (
+              <>
+                <div className="caption-box">
+                  <div className="caption-label">📌 Título de la publicación</div>
+                  <div className="caption-text">{s.caption.post_title}</div>
+                  <button className="btn btn-ghost btn-sm caption-copy" onClick={() => copyText(s.caption.post_title)}>
+                    📋 Copiar
+                  </button>
+                </div>
+
+                <div className="caption-box">
+                  <div className="caption-label">💬 Caption / Descripción</div>
+                  <div className="caption-text">{s.caption.caption}</div>
+                  <button className="btn btn-ghost btn-sm caption-copy" onClick={() => copyText(s.caption.caption)}>
+                    📋 Copiar
+                  </button>
+                </div>
+
+                <div className="caption-box">
+                  <div className="caption-label"># Hashtags</div>
+                  <div className="caption-text" style={{ color: 'var(--accent)' }}>{s.caption.hashtags}</div>
+                  <button className="btn btn-ghost btn-sm caption-copy" onClick={() => copyText(s.caption.hashtags)}>
+                    📋 Copiar
+                  </button>
+                </div>
+
+                <div className="caption-box" style={{ background: 'linear-gradient(135deg, #f3eeff, #fce7f3)', borderColor: '#d8b4fe' }}>
+                  <div className="caption-label">✨ TODO JUNTO — listo para pegar</div>
+                  <div className="caption-text" style={{ whiteSpace: 'pre-wrap' }}>{s.caption.full_post}</div>
+                  <button className="btn btn-primary btn-sm caption-copy" onClick={() => copyText(s.caption.full_post)}>
+                    📋 Copiar todo
+                  </button>
+                </div>
+              </>
+            )}
+
+            {!s.caption && !s.loading && (
+              <button className="btn btn-ghost" onClick={runCaptionOnly}>🔄 Generar texto de publicación</button>
+            )}
+
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '2px solid var(--border)' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+                ¿Crear otro video para otra plataforma con la misma historia?
+              </p>
+              <div className="platform-grid">
+                {PLATFORMS.filter(p => p.id !== s.platform).map(p => (
+                  <button key={p.id} className="platform-pill"
+                    onClick={() => setS(prev => ({ ...init(), platform: p.id, category: prev.category, genre: prev.genre }))}>
+                    {p.label}
+                  </button>
+                ))}
+                <button className="btn btn-ghost btn-sm" onClick={reset}>🔄 Nueva historia</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
