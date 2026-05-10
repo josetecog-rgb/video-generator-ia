@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Write",
+      "Edit"
+    ],
+    "deny": []
+  },
+  "env": {
+    "ANTHROPIC_API_KEY": "TU_API_KEY_AQUI"
+  }
+}
