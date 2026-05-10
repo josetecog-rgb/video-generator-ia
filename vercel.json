@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/images.js": { "maxDuration": 60 },
+    "api/videos.js": { "maxDuration": 300 },
+    "api/scripts.js": { "maxDuration": 60 },
+    "api/topics.js": { "maxDuration": 60 }
+  },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

@@ -13,52 +13,35 @@ const PLATFORMS = [
 const STEP = { PLATFORM: 0, TOPICS: 1, SCRIPT: 2, IMAGES: 3, VIDEO: 4, DONE: 5 };
 
 const initialState = () => ({
-  platform: '',
-  niche: '',
-  topics: [],
-  topic: '',
-  script: null,
-  images: [],
-  video: null,
-  step: STEP.PLATFORM,
-  loading: false,
-  error: '',
+  platform: '', niche: '', topics: [], topic: '',
+  script: null, images: [], imagesDone: false,
+  video: null, step: STEP.PLATFORM, loading: false, error: '',
 });
 
 export default function Pipeline() {
   const [state, setState] = useState(initialState());
-
   const set = (patch) => setState(prev => ({ ...prev, ...patch }));
 
-  // Auto-genera guión cuando se selecciona un tema
+  // Auto-genera guión al seleccionar tema
   useEffect(() => {
-    if (state.topic && state.step === STEP.TOPICS) {
-      runScript();
-    }
+    if (state.topic && state.step === STEP.TOPICS) runScript();
   }, [state.topic]);
 
   // Auto-genera imágenes cuando el guión está listo
   useEffect(() => {
-    if (state.script && state.step === STEP.SCRIPT) {
-      runImages();
-    }
+    if (state.script && state.step === STEP.SCRIPT) runImages();
   }, [state.script]);
 
   async function runTopics() {
     if (!state.platform) return set({ error: 'Elige una plataforma' });
     if (!state.niche.trim()) return set({ error: 'Escribe el tema o nicho' });
-    set({ loading: true, error: '', topics: [], topic: '', script: null, images: [], video: null });
+    set({ loading: true, error: '', topics: [], topic: '', script: null, images: [], imagesDone: false, video: null });
     try {
       const res = await generateTopics({ platform: state.platform, niche: state.niche, count: 6 });
       set({ topics: res.data.topics || [], step: STEP.TOPICS, loading: false });
     } catch (e) {
       set({ error: e.response?.data?.error || 'Error generando ideas', loading: false });
     }
-  }
-
-  async function selectTopic(topic) {
-    set({ topic, step: STEP.TOPICS });
-    // El useEffect dispara runScript automáticamente
   }
 
   async function runScript() {
@@ -73,28 +56,26 @@ export default function Pipeline() {
 
   async function runImages() {
     const prompts = state.script?.image_prompts || [];
-    if (!prompts.length) {
-      set({ step: STEP.IMAGES, images: [] });
+    // Solo generamos 1 imagen para evitar timeouts
+    const prompt = prompts[0];
+    if (!prompt) {
+      set({ imagesDone: true, step: STEP.IMAGES });
       return;
     }
     set({ loading: true, error: '' });
     try {
-      const results = await Promise.all(
-        prompts.slice(0, 3).map(prompt =>
-          generateImage({ prompt, width: 1024, height: 1024 })
-            .then(r => ({ url: r.data.image_url, prompt }))
-            .catch(() => null)
-        )
-      );
-      const images = results.filter(Boolean);
-      set({ images, step: STEP.IMAGES, loading: false });
+      const res = await generateImage({ prompt, width: 1024, height: 1024 });
+      const url = res.data.image_url;
+      const images = url ? [{ url, prompt }] : [];
+      set({ images, imagesDone: true, step: STEP.IMAGES, loading: false });
     } catch (e) {
-      set({ error: e.response?.data?.error || 'Error generando imágenes', loading: false });
+      // Si falla, igual avanzamos al paso de imágenes para no bloquear
+      set({ images: [], imagesDone: true, step: STEP.IMAGES, loading: false, error: 'Las imágenes no se pudieron generar — puedes igual generar el video.' });
     }
   }
 
   async function runVideo() {
-    set({ loading: true, error: '' });
+    set({ loading: true, error: '', step: STEP.VIDEO });
     try {
       const prompt = state.script?.hook || state.topic;
       const image_url = state.images[0]?.url;
@@ -108,27 +89,16 @@ export default function Pipeline() {
       });
       const videoUrl = res.data.result?.video?.url || res.data.result?.video_url || null;
       set({ video: videoUrl, step: STEP.DONE, loading: false });
-
-      // Guardar en proyectos
       try {
         await saveProject({
-          title: state.topic,
-          platform: state.platform,
-          niche: state.niche,
-          topic: state.topic,
-          script: state.script,
-          images: state.images,
-          video: { url: videoUrl, status: 'ready' },
-          status: 'ready',
+          title: state.topic, platform: state.platform, niche: state.niche,
+          topic: state.topic, script: state.script, images: state.images,
+          video: { url: videoUrl, status: 'ready' }, status: 'ready',
         });
       } catch (_) {}
     } catch (e) {
-      set({ error: e.response?.data?.error || 'Error generando video', loading: false });
+      set({ error: e.response?.data?.error || 'Error generando video', loading: false, step: STEP.IMAGES });
     }
-  }
-
-  function restart(newPlatform) {
-    setState({ ...initialState(), platform: newPlatform || '', niche: state.niche });
   }
 
   const s = state;
@@ -136,7 +106,7 @@ export default function Pipeline() {
   return (
     <div className="pipeline">
 
-      {/* PASO 0 — Plataforma y nicho */}
+      {/* PASO 1 — Plataforma y nicho */}
       <div className={`step ${s.step === STEP.PLATFORM ? 'active' : s.step > STEP.PLATFORM ? 'done' : ''}`}>
         <div className="step-header">
           <div className="step-num">{s.step > STEP.PLATFORM ? '✓' : '1'}</div>
@@ -157,11 +127,8 @@ export default function Pipeline() {
               <label>Plataforma destino</label>
               <div className="platform-grid">
                 {PLATFORMS.map(p => (
-                  <button
-                    key={p.id}
-                    className={`platform-pill ${s.platform === p.id ? 'active' : ''}`}
-                    onClick={() => set({ platform: p.id, error: '' })}
-                  >
+                  <button key={p.id} className={`platform-pill ${s.platform === p.id ? 'active' : ''}`}
+                    onClick={() => set({ platform: p.id, error: '' })}>
                     {p.label}
                   </button>
                 ))}
@@ -169,12 +136,9 @@ export default function Pipeline() {
             </div>
             <div className="form-group">
               <label>Nicho / Categoría</label>
-              <input
-                value={s.niche}
-                onChange={e => set({ niche: e.target.value, error: '' })}
+              <input value={s.niche} onChange={e => set({ niche: e.target.value, error: '' })}
                 placeholder="Ej: finanzas personales, fitness, cocina, tecnología..."
-                onKeyDown={e => e.key === 'Enter' && runTopics()}
-              />
+                onKeyDown={e => e.key === 'Enter' && runTopics()} />
             </div>
             {s.error && <div className="error-msg">{s.error}</div>}
             <button className="btn btn-primary" onClick={runTopics} disabled={s.loading}>
@@ -184,28 +148,28 @@ export default function Pipeline() {
         )}
       </div>
 
-      {/* PASO 1 — Elegir tema */}
+      {/* PASO 2 — Elegir tema */}
       {s.step >= STEP.TOPICS && (
-        <div className={`step ${s.step === STEP.TOPICS && !s.topic ? 'active' : s.topic ? 'done' : ''}`}>
+        <div className={`step ${!s.topic ? 'active' : 'done'}`}>
           <div className="step-header">
             <div className="step-num">{s.topic ? '✓' : '2'}</div>
             <div>
               <div className="step-title">Elige un tema</div>
-              <div className="step-subtitle">{s.topic || 'Selecciona la idea que más te guste'}</div>
+              <div className="step-subtitle">{s.topic || 'Haz clic en la idea que más te guste'}</div>
             </div>
             {s.topic && <span className="step-badge">✅ Seleccionado</span>}
           </div>
 
           {!s.topic && (
             <div className="step-body">
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4 }}>
-                Haz clic en un tema — el guión, imágenes y video se generarán automáticamente.
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: 10 }}>
+                Al seleccionar un tema, el guión, imágenes y video se generan solos.
               </p>
               <div className="topic-list">
                 {s.topics.map((t, i) => (
-                  <div key={i} className="topic-item" onClick={() => selectTopic(t)}>
+                  <div key={i} className="topic-item" onClick={() => set({ topic: t, step: STEP.TOPICS })}>
                     <span>{t}</span>
-                    <span style={{ color: 'var(--accent)', fontSize: '0.8rem' }}>→ Usar este</span>
+                    <span>→ Usar este</span>
                   </div>
                 ))}
               </div>
@@ -214,21 +178,23 @@ export default function Pipeline() {
         </div>
       )}
 
-      {/* PASO 2 — Guión */}
+      {/* PASO 3 — Guión */}
       {s.topic && (
-        <div className={`step ${s.step === STEP.SCRIPT && s.loading ? 'active' : s.script ? 'done' : 'active'}`}>
+        <div className={`step ${s.script ? 'done' : 'active'}`}>
           <div className="step-header">
             <div className="step-num">{s.script ? '✓' : '3'}</div>
             <div>
               <div className="step-title">Guión</div>
-              <div className="step-subtitle">{s.script ? 'Hook + desarrollo + CTA generados' : 'Generando guión automáticamente...'}</div>
+              <div className="step-subtitle">
+                {s.script ? 'Hook + desarrollo + CTA' : 'Generando guión automáticamente...'}
+              </div>
             </div>
             {s.script && <span className="step-badge">✅ Listo</span>}
           </div>
 
-          {s.step === STEP.SCRIPT && s.loading && !s.script && (
+          {!s.script && (
             <div className="step-body">
-              <div className="loading-bar"><span className="spinner" /> Escribiendo el guión con IA...</div>
+              <div className="loading-bar"><span className="spinner" /> Escribiendo el guión con DeepSeek...</div>
             </div>
           )}
 
@@ -251,42 +217,48 @@ export default function Pipeline() {
         </div>
       )}
 
-      {/* PASO 3 — Imágenes */}
+      {/* PASO 4 — Imágenes */}
       {s.script && (
-        <div className={`step ${s.step === STEP.IMAGES && s.loading ? 'active' : s.images.length ? 'done' : 'active'}`}>
+        <div className={`step ${s.imagesDone ? (s.images.length ? 'done' : 'active') : 'active'}`}>
           <div className="step-header">
             <div className="step-num">{s.images.length ? '✓' : '4'}</div>
             <div>
-              <div className="step-title">Imágenes</div>
+              <div className="step-title">Imagen</div>
               <div className="step-subtitle">
-                {s.images.length ? `${s.images.length} imagen(es) generada(s)` : 'Generando imágenes automáticamente...'}
+                {s.imagesDone
+                  ? (s.images.length ? 'Imagen generada con FLUX' : 'No se pudo generar — puedes continuar igual')
+                  : 'Generando imagen con FLUX...'}
               </div>
             </div>
-            {s.images.length > 0 && <span className="step-badge">✅ {s.images.length} imágenes</span>}
+            {s.images.length > 0 && <span className="step-badge">✅ Lista</span>}
           </div>
 
-          {s.step === STEP.IMAGES && s.loading && !s.images.length && (
+          {!s.imagesDone && (
             <div className="step-body">
-              <div className="loading-bar"><span className="spinner" /> Generando imágenes con FLUX...</div>
+              <div className="loading-bar"><span className="spinner" /> Generando imagen con FLUX AI...</div>
             </div>
           )}
 
-          {s.images.length > 0 && (
+          {s.imagesDone && (
             <div className="step-body">
-              <div className="image-grid">
-                {s.images.map((img, i) => (
-                  <div key={i} className="image-card">
-                    <img src={img.url} alt={`Imagen ${i + 1}`} />
-                    <div className="image-card-footer">
-                      <a href={img.url} download className="btn btn-ghost btn-sm">⬇️</a>
-                      <a href={img.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">🔗</a>
+              {s.images.length > 0 && (
+                <div className="image-grid">
+                  {s.images.map((img, i) => (
+                    <div key={i} className="image-card">
+                      <img src={img.url} alt={`Imagen ${i + 1}`} />
+                      <div className="image-card-footer">
+                        <a href={img.url} download className="btn btn-ghost btn-sm">⬇️ Descargar</a>
+                        <a href={img.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">🔗 Ver</a>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
+
+              {s.error && <div className="error-msg" style={{ marginBottom: 12 }}>{s.error}</div>}
 
               {s.step === STEP.IMAGES && !s.loading && !s.video && (
-                <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={runVideo} disabled={s.loading}>
+                <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={runVideo}>
                   🎬 Generar video
                 </button>
               )}
@@ -295,30 +267,30 @@ export default function Pipeline() {
         </div>
       )}
 
-      {/* PASO 4 — Video */}
-      {s.images.length > 0 && (s.step === STEP.VIDEO || s.step === STEP.DONE) && (
+      {/* PASO 5 — Video */}
+      {s.step >= STEP.VIDEO && (
         <div className={`step ${s.video ? 'done' : 'active'}`}>
           <div className="step-header">
             <div className="step-num">{s.video ? '✓' : '5'}</div>
             <div>
               <div className="step-title">Video</div>
-              <div className="step-subtitle">{s.video ? 'Video generado con IA' : 'Generando video (puede tardar 2-4 min)...'}</div>
+              <div className="step-subtitle">
+                {s.video ? 'Video generado y listo' : 'Generando video con Kling AI (2-4 min)...'}
+              </div>
             </div>
             {s.video && <span className="step-badge">✅ Listo</span>}
           </div>
 
           {s.loading && !s.video && (
             <div className="step-body">
-              <div className="loading-bar"><span className="spinner" /> Generando video con Kling AI...</div>
+              <div className="loading-bar"><span className="spinner" /> Generando video con Kling AI... (puede tardar 2-4 min)</div>
             </div>
           )}
 
           {s.video && (
             <div className="step-body">
               <div className="video-wrap">
-                <video controls>
-                  <source src={s.video} />
-                </video>
+                <video controls><source src={s.video} /></video>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <a href={s.video} download className="btn btn-ghost btn-sm">⬇️ Descargar</a>
@@ -326,21 +298,23 @@ export default function Pipeline() {
               </div>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Error global */}
-      {s.error && s.step > STEP.PLATFORM && (
-        <div className="error-msg">{s.error}</div>
+          {s.error && s.step === STEP.IMAGES && (
+            <div className="step-body">
+              <div className="error-msg">{s.error}</div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Repetir para otras plataformas */}
       {s.step === STEP.DONE && (
         <div className="repeat-banner">
-          <h3>🎉 ¡Video guardado en Proyectos! ¿Crear el mismo contenido para otra plataforma?</h3>
+          <h3>🎉 ¡Guardado en Proyectos! ¿Repetir para otra plataforma?</h3>
           <div className="repeat-grid">
             {PLATFORMS.filter(p => p.id !== s.platform).map(p => (
-              <button key={p.id} className="platform-pill" onClick={() => restart(p.id)}>
+              <button key={p.id} className="platform-pill"
+                onClick={() => setState({ ...initialState(), platform: p.id, niche: s.niche })}>
                 {p.label}
               </button>
             ))}
