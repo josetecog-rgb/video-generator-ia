@@ -9,13 +9,28 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   try {
-    const { sceneDescription, genre, style, protagonistDescription, size = 'portrait_16_9' } = req.body;
+    const {
+      sceneDescription,
+      action = '',
+      genre,
+      style,
+      protagonistVisualDescription = '',
+      sceneIndex = 0,
+      size = 'portrait_16_9',
+    } = req.body;
+
     if (!sceneDescription) return res.status(400).json({ error: '"sceneDescription" es requerido' });
 
-    // Construye el prompt directamente — sin llamada extra a DeepSeek
-    const finalPrompt = buildImagePrompt({ sceneDescription, genre, style, protagonistDescription });
-    const image_url = await generateImage({ prompt: finalPrompt, size });
+    const finalPrompt = buildImagePrompt({
+      sceneDescription,
+      action,
+      genre,
+      style,
+      protagonistVisualDescription,
+      sceneIndex,
+    });
 
+    const image_url = await generateImage({ prompt: finalPrompt, size });
     res.json({ image_url, prompt_used: finalPrompt });
   } catch (err) {
     res.status(500).json({ error: 'Error generando imagen', detail: err.message });

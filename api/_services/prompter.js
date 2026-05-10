@@ -1,60 +1,56 @@
-// Construye el prompt DIRECTAMENTE sin llamar a DeepSeek
-// El género va PRIMERO porque FLUX le da más peso a los tokens iniciales
+// Estructura correcta para FLUX según investigación:
+// [SUJETO + ACCIÓN] → [AMBIENTE] → [ESTILO ARTÍSTICO] → [COMPOSICIÓN] → [ILUMINACIÓN] → [PALETA] → [MOOD] → [CALIDAD]
+// El SUJETO siempre primero — FLUX le da más peso a los primeros tokens
 
-const STYLE_PRESETS = {
-  'comic-clasico':   'classic Latin American comic book style, bold black ink outlines, flat colors, Ben-Day dots, vintage comic panels, Pepo art style, expressive cartoon faces',
-  'pantera-rosa':    'retro animated cartoon style, smooth clean lines, vibrant flat colors, 1960s animation style, whimsical minimalist backgrounds, elegant stylized characters, pastel tones',
-  'marvel':          'Marvel Comics superhero style, dynamic poses, bold inking, dramatic lighting, detailed comic book panels, American comic style',
-  'anime':           'manga anime art style, screen tone shading, dynamic action lines, large expressive eyes, detailed hair, shonen manga by Akira Toriyama',
-  'pixar':           '3D animated Pixar movie style, soft rounded features, large expressive eyes, subsurface skin scattering, vibrant saturated colors, Disney Pixar quality render',
-  'pop-art':         'Roy Lichtenstein pop art style, Ben-Day halftone dots, bold black outlines, primary flat colors, retro comic strip graphic design',
-  'cartoon-network': 'modern Cartoon Network animated style, bold thick outlines, exaggerated proportions, bright saturated colors, flat shading, Adventure Time aesthetic',
-  'acuarela':        'children book watercolor illustration style, soft brushstrokes, pastel warm colors, gentle textures, whimsical charming characters, Quentin Blake style',
+const STYLE_SUFFIX = {
+  'comic-clasico':   'vintage comic book style, bold black ink outlines, flat colors, Ben-Day dots, Pepo Perez art style, Hergé style, comic panel illustration',
+  'pantera-rosa':    'retro 1960s animated cartoon style, smooth clean lines, vibrant flat pastel colors, DePatie-Freleng animation style, cartoon illustration',
+  'marvel':          'Marvel Comics style, bold dynamic inking, dramatic superhero comic book illustration, Jim Lee style, Neal Adams style, comic book panel',
+  'anime':           'manga anime illustration, screen tone shading, bold outlines, Akira Toriyama style, shonen manga comic panel, anime art',
+  'pixar':           'Pixar 3D animated movie style, soft rounded features, expressive eyes, subsurface scattering, Disney Pixar quality, 3D render cartoon',
+  'pop-art':         'Roy Lichtenstein pop art style, Ben-Day halftone dots, bold black outlines, primary flat colors, pop art comic illustration',
+  'cartoon-network': 'Cartoon Network animated style, bold outlines, exaggerated proportions, bright saturated colors, Adventure Time aesthetic, cartoon illustration',
+  'acuarela':        'children book watercolor illustration, soft brushstrokes, pastel warm colors, Quentin Blake style, storybook illustration',
 };
 
-const GENRE_MOOD = {
-  'Terror':       'dark horror atmosphere, ominous threatening shadows, terrified expressions, cold desaturated tones, spine-chilling scene',
-  'Suspenso':     'tense suspenseful atmosphere, dramatic high contrast shadows, nervous anxious expressions, noir thriller mood',
-  'Acción':       'explosive dynamic action scene, motion energy, intense powerful expressions, adrenaline rush, vivid bright colors',
-  'Comedia':      'funny cheerful scene, exaggerated comic expressions, bright warm colors, playful joyful mood, humor visual gags',
-  'Romance':      'warm romantic tender scene, soft golden lighting, loving sweet expressions, gentle pastel colors, heartwarming mood',
-  'Drama':        'emotional dramatic scene, deep feelings, intense sorrowful or determined expression, naturalistic moody lighting',
-  'Motivacional': 'inspiring epic triumphant scene, golden hour warm light, powerful confident expression, uplifting heroic mood',
-  'Misterio':     'mysterious enigmatic atmosphere, soft fog, curious puzzled expressions, cool blue tones, intriguing strange scene',
+const GENRE_LIGHTING = {
+  'Terror':       'dramatic rim lighting, deep shadows, cold blue moonlight, horror atmosphere, ominous dark background',
+  'Suspenso':     'dramatic chiaroscuro lighting, high contrast shadows, tense noir atmosphere, suspenseful mood',
+  'Acción':       'dynamic action lighting, bright vivid colors, energetic explosive composition, action movie lighting',
+  'Comedia':      'bright cheerful lighting, warm sunny colors, playful joyful atmosphere, light-hearted fun mood',
+  'Romance':      'soft warm golden hour lighting, gentle pink and amber tones, romantic dreamy atmosphere, tender mood',
+  'Drama':        'moody naturalistic lighting, emotional cinematic atmosphere, deep shadows and warm highlights',
+  'Motivacional': 'epic golden hour lighting, inspirational warm sunlight, triumphant uplifting atmosphere, heroic mood',
+  'Misterio':     'mysterious cool blue lighting, soft fog and mist, enigmatic shadowy atmosphere, curious mood',
 };
 
-const ARTIST_REF = {
-  'comic-clasico':   'by Pepo, by Hergé, comic strip aesthetic, high contrast',
-  'pantera-rosa':    'retro cartoon animation, DePatie-Freleng style, limited color palette',
-  'marvel':          'by Jim Lee, by Jack Kirby, by Neal Adams',
-  'anime':           'by Akira Toriyama, by CLAMP, Shueisha publication quality',
-  'pixar':           'Pixar Animation Studios, Renderman quality, 3D render',
-  'pop-art':         'by Roy Lichtenstein, by Andy Warhol, pop art movement',
-  'cartoon-network': 'Cartoon Network style, modern animated series',
-  'acuarela':        'by Quentin Blake, by Eric Carle, storybook illustration',
+const COMPOSITION = {
+  0: 'full body shot, establishing composition, character centered',
+  1: 'medium shot, three-quarter view, expressive face visible',
+  2: 'dramatic close-up or wide reveal shot, climax composition',
 };
 
-function buildImagePrompt({ sceneDescription, genre, style = 'comic-clasico', protagonistDescription = '' }) {
-  const mood    = GENRE_MOOD[genre]        || 'dramatic scene';
-  const artStyle = STYLE_PRESETS[style]    || STYLE_PRESETS['comic-clasico'];
-  const artist   = ARTIST_REF[style]       || '';
+function buildImagePrompt({ sceneDescription, genre, style = 'comic-clasico', protagonistVisualDescription = '', action = '', sceneIndex = 0 }) {
+  const styleStr     = STYLE_SUFFIX[style]     || STYLE_SUFFIX['comic-clasico'];
+  const lightingStr  = GENRE_LIGHTING[genre]   || GENRE_LIGHTING['Drama'];
+  const composStr    = COMPOSITION[sceneIndex] || COMPOSITION[0];
 
-  // El protagonista se inyecta LITERALMENTE como sujeto principal
-  const protagonist = protagonistDescription
-    ? protagonistDescription.trim()
-    : 'main character';
+  // SUJETO primero — el protagonista con su descripción visual exacta + acción en la escena
+  const subject = protagonistVisualDescription
+    ? `${protagonistVisualDescription}, ${action || sceneDescription}`
+    : action || sceneDescription;
 
-  // Estructura: GÉNERO primero → ESTILO → PROTAGONISTA (quién es + qué hace en la escena) → ESCENA → ARTISTA → CALIDAD
+  // Estructura FLUX correcta: Sujeto → Ambiente → Estilo → Composición → Iluminación → Calidad
   const parts = [
-    mood,
-    artStyle,
-    `${protagonist}, ${sceneDescription}`,
-    artist,
-    'full body shot, dramatic composition',
-    'masterpiece, best quality, highly detailed, sharp focus, ultra detailed',
+    subject,
+    sceneDescription,
+    styleStr,
+    composStr,
+    lightingStr,
+    'masterpiece, best quality, highly detailed, sharp focus, professional illustration',
   ];
 
   return parts.filter(Boolean).join(', ');
 }
 
-module.exports = { buildImagePrompt, STYLE_PRESETS };
+module.exports = { buildImagePrompt, STYLE_SUFFIX };

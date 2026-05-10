@@ -72,7 +72,7 @@ export default function Pipeline() {
     if (!s.genre) return set({ error: 'Elige un género' });
     set({ loading: true, loadingMsg: 'Escribiendo la historia...', error: '', script: null, images: [], imagesDone: false, video: null, caption: null });
     try {
-      const res = await generateScript({ category: s.category, genre: s.genre, platform: s.platform });
+      const res = await generateScript({ category: s.category, genre: s.genre, platform: s.platform, protagonistDescription: s.protagonistDesc || '' });
       set({ script: res.data.script, step: STEP.SCRIPT, loading: false, loadingMsg: '' });
     } catch (e) {
       set({ error: e.response?.data?.error || 'Error generando historia', loading: false, loadingMsg: '' });
@@ -94,9 +94,11 @@ export default function Pipeline() {
         try {
           const res = await generateImage({
             sceneDescription: scenes[i].description,
+            action: scenes[i].action || '',
             genre: s.genre,
             style: s.style,
-            protagonistDescription: s.protagonistDesc || undefined,
+            protagonistVisualDescription: s.script?.protagonist_visual_description || s.protagonistDesc || '',
+            sceneIndex: i,
             size: 'portrait_16_9',
           });
           results.push({ url: res.data.image_url, prompt: res.data.prompt_used, description: scenes[i].description });
@@ -256,6 +258,12 @@ export default function Pipeline() {
               <div className="script-section" style={{ borderLeftColor: '#00b4d8', background: '#f0faff' }}>
                 <strong>🎬 {s.script.scenes.length} Escenas</strong>
                 {s.script.scenes.map((sc, i) => <p key={i} style={{ marginTop: 6 }}><strong>{i+1}.</strong> {sc.description}</p>)}
+              </div>
+            )}
+            {s.script.protagonist_visual_description && (
+              <div className="script-section" style={{ borderLeftColor: '#e91e8c', background: '#fff0f8' }}>
+                <strong>🧑 Protagonista (descripción visual para imágenes)</strong>
+                <p style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#666' }}>{s.script.protagonist_visual_description}</p>
               </div>
             )}
             <div className="script-section cta"><strong>🚀 CTA</strong><p>{s.script.cta}</p></div>
