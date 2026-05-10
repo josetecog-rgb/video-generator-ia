@@ -1,10 +1,12 @@
 {
   "functions": {
-    "api/images.js":   { "maxDuration": 90 },
-    "api/videos.js":   { "maxDuration": 300 },
-    "api/scripts.js":  { "maxDuration": 60 },
-    "api/topics.js":   { "maxDuration": 60 },
-    "api/captions.js": { "maxDuration": 60 }
+    "api/images.js":       { "maxDuration": 90 },
+    "api/images-batch.js": { "maxDuration": 90 },
+    "api/videos.js":       { "maxDuration": 300 },
+    "api/scripts.js":      { "maxDuration": 60 },
+    "api/topics.js":       { "maxDuration": 60 },
+    "api/captions.js":     { "maxDuration": 60 },
+    "api/upload.js":       { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }

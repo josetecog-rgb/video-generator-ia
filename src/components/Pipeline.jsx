@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { generateScript, generateImage, generateVideo, generateCaption, uploadImage } from '../api';
+import { generateScript, generateImagesBatch, generateVideo, generateCaption, uploadImage } from '../api';
 
 const PLATFORMS = [
   { id: 'tiktok',    label: '🎵 TikTok' },
@@ -79,42 +79,34 @@ export default function Pipeline() {
     }
   }
 
-  /* ── PASO 2: Generar imágenes con estilo y protagonista ── */
+  /* ── PASO 2: Generar 4 imágenes EN PARALELO ── */
   async function runImages() {
     const scenes = s.script?.scenes || [];
-    const total = Math.min(scenes.length, 3);
-    set({ loading: true, loadingMsg: `Generando imagen 1 de ${total}...`, error: '', images: [] });
-    const results = [];
-    for (let i = 0; i < total; i++) {
-      set({ loadingMsg: `Generando imagen ${i + 1} de ${total} — puede tardar 20s...` });
-      // Delay entre imágenes — Together AI free tiene rate limit estricto
-      if (i > 0) await new Promise(r => setTimeout(r, 8000));
-      let success = false;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const res = await generateImage({
-            sceneDescription: scenes[i].description,
-            action: scenes[i].action || '',
-            genre: s.genre,
-            style: s.style,
-            protagonistVisualDescription: s.script?.protagonist_visual_description || s.protagonistDesc || '',
-            sceneIndex: i,
-            size: 'portrait_16_9',
-          });
-          results.push({ url: res.data.image_url, prompt: res.data.prompt_used, description: scenes[i].description });
-          success = true;
-          break;
-        } catch (e) {
-          if (attempt < 2) {
-            set({ loadingMsg: `Reintentando imagen ${i + 1}...` });
-            await new Promise(r => setTimeout(r, 5000));
-          }
-        }
-      }
-      if (!success) results.push({ url: null, description: scenes[i].description });
-      setS(prev => ({ ...prev, images: [...results] }));
+    if (!scenes.length) return;
+
+    set({ loading: true, loadingMsg: `Generando ${scenes.length} imágenes en paralelo...`, error: '', images: [] });
+
+    try {
+      const res = await generateImagesBatch({
+        scenes: scenes.map(sc => ({ description: sc.description, action: sc.action || '' })),
+        genre: s.genre,
+        style: s.style,
+        protagonistVisualDescription: s.script?.protagonist_visual_description || s.protagonistDesc || '',
+        size: 'portrait_16_9',
+      });
+
+      const images = res.data.images || [];
+      set({
+        images,
+        imagesDone: true,
+        step: STEP.IMAGES,
+        loading: false,
+        loadingMsg: '',
+        error: images.filter(i => i.url).length === 0 ? 'No se generaron imágenes. Intenta de nuevo.' : '',
+      });
+    } catch (e) {
+      set({ error: e.response?.data?.error || 'Error generando imágenes', loading: false, loadingMsg: '', imagesDone: true, step: STEP.IMAGES });
     }
-    set({ imagesDone: true, step: STEP.IMAGES, loading: false, loadingMsg: '' });
   }
 
   /* ── PASO 3: Generar video ── */
