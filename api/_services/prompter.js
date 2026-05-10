@@ -1,46 +1,94 @@
 const { chat } = require('./deepseek');
 
-// Genera un prompt de imagen ultra optimizado siguiendo el método de 6 pasos
-async function optimizeImagePrompt({ sceneDescription, genre, style = 'cinematic photorealistic' }) {
-  const genreStyles = {
-    'Terror':       'dark horror cinematography, ominous shadows, desaturated cold tones',
-    'Suspenso':     'neo-noir cinematography, dramatic shadows, high contrast, teal and orange palette',
-    'Acción':       'action movie cinematography, dynamic composition, motion blur, vivid colors',
-    'Comedia':      'bright warm comedy cinematography, soft shadows, vibrant cheerful colors',
-    'Romance':      'romantic soft cinematography, warm golden tones, bokeh background, pastel colors',
-    'Drama':        'dramatic film cinematography, moody lighting, naturalistic colors, emotional depth',
-    'Motivacional': 'epic inspirational cinematography, golden hour light, powerful composition',
-    'Misterio':     'mysterious atmospheric cinematography, fog, cool blue tones, shadows',
+const STYLE_PRESETS = {
+  'comic-clasico': {
+    label: 'Cómic Clásico (Condorito)',
+    base: 'classic Latin American comic book style, bold black ink outlines, flat vibrant colors, Ben-Day dots, vintage comic panels, expressive cartoon faces, Pepo art style, high contrast black and white with spot colors',
+    artist: 'by Pepo, by Hergé, classic comic strip aesthetic',
+  },
+  'pantera-rosa': {
+    label: 'Caricatura (Pantera Rosa)',
+    base: 'animated cartoon style, smooth clean lines, vibrant flat colors, 1960s DePatie-Freleng animation style, whimsical minimalist backgrounds, pastel pink tones, elegant long limbs, stylized cartoon characters',
+    artist: 'Pink Panther cartoon style, retro animation aesthetic, limited color palette',
+  },
+  'marvel': {
+    label: 'Marvel / DC Comics',
+    base: 'Marvel Comics superhero style, dynamic action poses, bold inking, dramatic lighting, detailed musculature, comic book panels, intense expressions',
+    artist: 'by Jim Lee, by Jack Kirby, by Neal Adams, American comic book style',
+  },
+  'anime': {
+    label: 'Manga / Anime',
+    base: 'detailed manga comic style, anime art, screen tone shading, dynamic action lines, large expressive eyes, detailed hair, dramatic poses, black and white with selective color',
+    artist: 'by Akira Toriyama, by CLAMP, shonen manga style, Shueisha publication quality',
+  },
+  'pixar': {
+    label: 'Pixar / Disney 3D',
+    base: '3D animated movie style, Pixar quality rendering, soft rounded features, large expressive eyes, subsurface skin scattering, vibrant saturated colors, cinematic lighting',
+    artist: 'Pixar Animation Studios style, Disney quality, 3D render, Renderman quality',
+  },
+  'pop-art': {
+    label: 'Pop Art (Warhol)',
+    base: 'Roy Lichtenstein pop art comic style, Ben-Day halftone dots, bold black outlines, primary flat colors, speech bubbles, retro comic strip, high contrast, graphic design aesthetic',
+    artist: 'by Roy Lichtenstein, by Andy Warhol, American pop art movement',
+  },
+  'cartoon-network': {
+    label: 'Cartoon Network',
+    base: 'modern cartoon style, bold thick outlines, exaggerated proportions, bright saturated colors, flat shading with simple shadows, fun character design, geometric shapes',
+    artist: 'Cartoon Network style, Adventure Time aesthetic, modern animated series quality',
+  },
+  'acuarela': {
+    label: 'Acuarela Infantil',
+    base: 'children book illustration watercolor style, soft brushstrokes, pastel warm colors, gentle textures, whimsical charming characters, loose expressive painting',
+    artist: 'by Quentin Blake, by Eric Carle, children illustration style, storybook quality',
+  },
+};
+
+async function optimizeImagePrompt({ sceneDescription, genre, style = 'comic-clasico', protagonistDescription = '' }) {
+  const preset = STYLE_PRESETS[style] || STYLE_PRESETS['comic-clasico'];
+
+  const genreAtmosphere = {
+    'Terror':       'dark ominous atmosphere, horror mood, shadows, fear expression',
+    'Suspenso':     'tense dramatic atmosphere, suspense, mysterious shadows',
+    'Acción':       'dynamic explosive action, motion lines, intense energy',
+    'Comedia':      'funny exaggerated expressions, comedy visual gags, cheerful',
+    'Romance':      'warm romantic atmosphere, soft glowing light, tender expressions',
+    'Drama':        'emotional dramatic scene, deep feelings, intense expressions',
+    'Motivacional': 'inspiring epic scene, triumphant mood, powerful composition',
+    'Misterio':     'mysterious eerie atmosphere, fog, question marks, shadows',
   };
 
-  const baseStyle = genreStyles[genre] || 'cinematic photorealistic';
+  const atmosphere = genreAtmosphere[genre] || 'dramatic scene';
+  const protagonistNote = protagonistDescription
+    ? `The main character is: ${protagonistDescription}. Keep this character consistent.`
+    : '';
 
-  const prompt = `Eres un experto mundial en crear prompts para generación de imágenes IA (Stable Diffusion, FLUX, Midjourney).
+  const prompt = `You are a world-class AI image prompt engineer specializing in comic and animation styles.
 
-Escena a visualizar: "${sceneDescription}"
-Género: ${genre}
-Estilo base: ${baseStyle}
+Create ONE optimized image prompt in English for this scene:
+Scene: "${sceneDescription}"
+Art Style: ${preset.label}
+Genre atmosphere: ${atmosphere}
+${protagonistNote}
 
-Crea UN prompt en inglés ultra optimizado siguiendo EXACTAMENTE esta estructura separada por comas:
+Follow this EXACT structure separated by commas:
+1. ART STYLE: "${preset.base}"
+2. MAIN SUBJECT: [specific character description with action, expression, clothing, pose - very detailed]
+3. BACKGROUND SCENE: [detailed environment matching the scene]
+4. ARTIST REFERENCE: "${preset.artist}"
+5. COMPOSITION: [panel layout, camera angle - e.g. "full body shot", "close-up face", "wide shot"]
+6. QUALITY: "masterpiece, best quality, highly detailed, sharp lines, professional illustration"
 
-1. ESTILO DOMINANTE: Define el estilo visual completo (ej: "cinematic digital painting", "photorealistic 8k render", "dramatic oil painting")
-2. SUJETO PRINCIPAL: Describe con detalles específicos (color de ropa, expresión, postura, edad, acción exacta, ambiente)
-3. ELEMENTOS DE REFUERZO: Artista referencia + técnica (ej: "by Greg Rutkowski, by Artgerm, hyperdetailed, award winning photography")
-4. COMPOSICIÓN: Tipo de plano y datos técnicos (ej: "full body shot", "close-up portrait", "wide establishing shot", "35mm lens", "f/2.8")
-5. ILUMINACIÓN Y ATMÓSFERA: (ej: "dramatic chiaroscuro lighting", "golden hour", "neon rim light", "volumetric fog")
-6. CALIFICADORES DE CALIDAD: (ej: "8k uhd", "ultra detailed", "sharp focus", "trending on artstation", "masterpiece")
+RULES:
+- All in ENGLISH
+- Comma-separated keywords only, no long sentences
+- Be very specific about character appearance and action
+- 70-100 words total
+- NO explanations, ONLY the prompt
 
-REGLAS CRÍTICAS:
-- Todo en INGLÉS
-- Sin frases largas — solo palabras clave separadas por comas
-- Sé muy específico en el sujeto (nada de "a person", di "a terrified young woman with dark hair, torn white dress, running")
-- El prompt debe tener entre 60-100 palabras
-- NO incluyas texto explicativo, SOLO el prompt
+Respond with ONLY the prompt:`;
 
-Responde ÚNICAMENTE con el prompt, sin comillas, sin explicación:`;
-
-  const result = await chat([{ role: 'user', content: prompt }], { temperature: 0.7, max_tokens: 300 });
+  const result = await chat([{ role: 'user', content: prompt }], { temperature: 0.6, max_tokens: 300 });
   return result.trim().replace(/^["']|["']$/g, '');
 }
 
-module.exports = { optimizeImagePrompt };
+module.exports = { optimizeImagePrompt, STYLE_PRESETS };

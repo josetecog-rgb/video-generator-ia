@@ -9,16 +9,12 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   try {
-    const { prompt, sceneDescription, genre, size = 'portrait_16_9' } = req.body;
-    if (!prompt && !sceneDescription) return res.status(400).json({ error: '"prompt" o "sceneDescription" son requeridos' });
+    const { sceneDescription, genre, style, protagonistDescription, referenceImageUrl, size = 'portrait_16_9' } = req.body;
+    if (!sceneDescription) return res.status(400).json({ error: '"sceneDescription" es requerido' });
 
-    // Si viene descripción de escena, optimiza el prompt primero
-    let finalPrompt = prompt;
-    if (sceneDescription && genre) {
-      finalPrompt = await optimizeImagePrompt({ sceneDescription, genre });
-    }
+    const finalPrompt = await optimizeImagePrompt({ sceneDescription, genre, style, protagonistDescription });
+    const image_url = await generateImage({ prompt: finalPrompt, size, referenceImageUrl });
 
-    const image_url = await generateImage({ prompt: finalPrompt, size });
     res.json({ image_url, prompt_used: finalPrompt });
   } catch (err) {
     res.status(500).json({ error: 'Error generando imagen', detail: err.message });

@@ -6,10 +6,15 @@ const SIZES = {
   'square_hd':      { width: 1024, height: 1024 },
 };
 
-async function generateImage({ prompt, size = 'portrait_16_9' }) {
+async function generateImage({ prompt, size = 'portrait_16_9', referenceImageUrl = null }) {
   const { width, height } = SIZES[size] || SIZES['portrait_16_9'];
   const encoded = encodeURIComponent(prompt);
-  const url = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&enhance=true`;
+
+  let url = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&model=flux&nologo=true&enhance=true&seed=${Math.floor(Math.random() * 99999)}`;
+
+  if (referenceImageUrl) {
+    url += `&image=${encodeURIComponent(referenceImageUrl)}&strength=0.7`;
+  }
 
   const response = await axios.get(url, {
     responseType: 'arraybuffer',
