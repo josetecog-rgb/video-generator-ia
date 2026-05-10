@@ -49,15 +49,22 @@ export default function Pipeline() {
     }
   }
 
-  /* ── PASO 2: Generar imágenes de las escenas ── */
+  /* ── PASO 2: Generar imágenes con prompt optimizado ── */
   async function runImages() {
     const scenes = s.script?.scenes || [];
-    set({ loading: true, loadingMsg: 'Generando imágenes de las escenas...', error: '' });
+    set({ loading: true, loadingMsg: 'Optimizando prompts y generando imágenes...', error: '' });
     const results = [];
-    for (const scene of scenes.slice(0, 3)) {
+    for (let i = 0; i < Math.min(scenes.length, 3); i++) {
+      const scene = scenes[i];
+      set({ loadingMsg: `Generando imagen ${i + 1} de ${Math.min(scenes.length, 3)}...` });
       try {
-        const res = await generateImage({ prompt: scene.image_prompt, size: 'portrait_16_9' });
-        results.push({ url: res.data.image_url, description: scene.description });
+        // Envía descripción + género para que el backend optimice el prompt
+        const res = await generateImage({
+          sceneDescription: scene.description,
+          genre: s.genre,
+          size: 'portrait_16_9',
+        });
+        results.push({ url: res.data.image_url, prompt: res.data.prompt_used, description: scene.description });
       } catch {
         results.push({ url: null, description: scene.description });
       }
@@ -72,12 +79,11 @@ export default function Pipeline() {
       const prompt = s.script?.hook || s.script?.title || s.category;
       const image_url = s.images.find(i => i.url)?.url;
       const res = await generateVideo({ prompt, image_url, duration: 5 });
-      const videoUrl = res.data.result?.video?.url || res.data.result?.video_url || null;
+      const videoUrl = res.data.video_url || null;
       set({ video: videoUrl, loading: false, loadingMsg: '' });
-      // Auto-genera caption después del video
       await runCaption(videoUrl);
     } catch (e) {
-      set({ error: e.response?.data?.error || 'Error generando video. Intenta de nuevo.', loading: false, loadingMsg: '', step: STEP.IMAGES });
+      set({ error: e.response?.data?.error || e.message || 'Error generando video.', loading: false, loadingMsg: '', step: STEP.IMAGES });
     }
   }
 

@@ -1,4 +1,4 @@
-const { generateVideo } = require('./_services/falai');
+const { generateVideo } = require('./_services/video');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,12 +8,12 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   try {
-    const { prompt, image_url, duration = 5, model = 'fal-ai/kling-video/v1/standard/text-to-video' } = req.body;
-    if (!prompt) return res.status(400).json({ error: 'El campo "prompt" es requerido' });
+    const { prompt, image_url, duration = 5 } = req.body;
+    if (!prompt) return res.status(400).json({ error: '"prompt" es requerido' });
 
-    const result = await generateVideo({ prompt, image_url, duration, model });
-    res.json({ result });
+    const result = await generateVideo({ prompt, image_url, duration });
+    res.json({ video_url: result.url, provider: result.provider });
   } catch (err) {
-    res.status(500).json({ error: 'Error generando video', detail: err.message });
+    res.status(500).json({ error: err.message });
   }
 };
