@@ -1,3 +1,5 @@
+const axios = require('axios');
+
 async function generateImage({ prompt, size = 'portrait_16_9' }) {
   const dimensions = {
     'portrait_16_9':  { width: 576,  height: 1024 },
@@ -6,31 +8,25 @@ async function generateImage({ prompt, size = 'portrait_16_9' }) {
   };
   const { width, height } = dimensions[size] || dimensions['portrait_16_9'];
 
-  const res = await fetch(
-    'https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell',
+  const response = await axios.post(
+    'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0',
     {
-      method: 'POST',
+      inputs: prompt,
+      parameters: { width, height, num_inference_steps: 30, guidance_scale: 7.5 },
+    },
+    {
       headers: {
         'Authorization': `Bearer ${process.env.HF_TOKEN}`,
         'Content-Type': 'application/json',
         'x-wait-for-model': 'true',
       },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: { width, height, num_inference_steps: 4 },
-      }),
-      signal: AbortSignal.timeout(85000),
+      responseType: 'arraybuffer',
+      timeout: 80000,
     }
   );
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`HF error ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  const buffer = await res.arrayBuffer();
-  const base64 = Buffer.from(buffer).toString('base64');
-  const contentType = res.headers.get('content-type') || 'image/jpeg';
+  const base64 = Buffer.from(response.data).toString('base64');
+  const contentType = response.headers['content-type'] || 'image/jpeg';
   return `data:${contentType};base64,${base64}`;
 }
 
