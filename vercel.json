@@ -1,23 +1,5 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "build" }
-    },
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    { "src": "/api/topics", "dest": "/api/topics.js" },
-    { "src": "/api/scripts", "dest": "/api/scripts.js" },
-    { "src": "/api/images", "dest": "/api/images.js" },
-    { "src": "/api/videos", "dest": "/api/videos.js" },
-    { "src": "/api/projects", "dest": "/api/projects.js" },
-    { "src": "/api/projects/(.*)", "dest": "/api/projects.js" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
