@@ -1,57 +1,60 @@
-const { chat } = require('./deepseek');
+// Construye el prompt DIRECTAMENTE sin llamar a DeepSeek
+// El género va PRIMERO porque FLUX le da más peso a los tokens iniciales
 
 const STYLE_PRESETS = {
-  'comic-clasico':   { base: 'classic Latin American comic book style, bold black ink outlines, flat vibrant colors, Ben-Day dots, vintage comic panels, Pepo art style', artist: 'by Pepo, by Hergé, comic strip aesthetic' },
-  'pantera-rosa':    { base: 'animated cartoon style, smooth clean lines, vibrant flat colors, 1960s DePatie-Freleng animation style, whimsical minimalist backgrounds, retro cartoon', artist: 'Pink Panther cartoon style, retro animation aesthetic' },
-  'marvel':          { base: 'Marvel Comics superhero style, dynamic action poses, bold inking, dramatic lighting, comic book panels', artist: 'by Jim Lee, by Jack Kirby, by Neal Adams, American comic book style' },
-  'anime':           { base: 'detailed manga comic style, anime art, screen tone shading, dynamic action lines, large expressive eyes', artist: 'by Akira Toriyama, by CLAMP, shonen manga style' },
-  'pixar':           { base: '3D animated movie style, Pixar quality rendering, soft rounded features, large expressive eyes, subsurface skin scattering, vibrant colors', artist: 'Pixar Animation Studios style, Disney quality, 3D render' },
-  'pop-art':         { base: 'Roy Lichtenstein pop art comic style, Ben-Day halftone dots, bold black outlines, primary flat colors, retro comic strip', artist: 'by Roy Lichtenstein, American pop art movement' },
-  'cartoon-network': { base: 'modern cartoon style, bold thick outlines, exaggerated proportions, bright saturated colors, flat shading, fun character design', artist: 'Cartoon Network style, Adventure Time aesthetic' },
-  'acuarela':        { base: 'children book illustration watercolor style, soft brushstrokes, pastel warm colors, whimsical charming characters', artist: 'by Quentin Blake, by Eric Carle, storybook quality' },
+  'comic-clasico':   'classic Latin American comic book style, bold black ink outlines, flat colors, Ben-Day dots, vintage comic panels, Pepo art style, expressive cartoon faces',
+  'pantera-rosa':    'retro animated cartoon style, smooth clean lines, vibrant flat colors, 1960s animation style, whimsical minimalist backgrounds, elegant stylized characters, pastel tones',
+  'marvel':          'Marvel Comics superhero style, dynamic poses, bold inking, dramatic lighting, detailed comic book panels, American comic style',
+  'anime':           'manga anime art style, screen tone shading, dynamic action lines, large expressive eyes, detailed hair, shonen manga by Akira Toriyama',
+  'pixar':           '3D animated Pixar movie style, soft rounded features, large expressive eyes, subsurface skin scattering, vibrant saturated colors, Disney Pixar quality render',
+  'pop-art':         'Roy Lichtenstein pop art style, Ben-Day halftone dots, bold black outlines, primary flat colors, retro comic strip graphic design',
+  'cartoon-network': 'modern Cartoon Network animated style, bold thick outlines, exaggerated proportions, bright saturated colors, flat shading, Adventure Time aesthetic',
+  'acuarela':        'children book watercolor illustration style, soft brushstrokes, pastel warm colors, gentle textures, whimsical charming characters, Quentin Blake style',
 };
 
 const GENRE_MOOD = {
-  'Terror':       'dark horror atmosphere, ominous shadows, fear expression, cold desaturated tones',
-  'Suspenso':     'tense dramatic atmosphere, high contrast shadows, suspense mood',
-  'Acción':       'dynamic action, motion energy, intense dramatic composition',
-  'Comedia':      'funny exaggerated expressions, cheerful bright colors, comedy visual gags',
-  'Romance':      'warm romantic lighting, soft golden tones, tender emotional scene',
-  'Drama':        'emotional dramatic scene, moody naturalistic lighting, intense expression',
-  'Motivacional': 'epic inspiring composition, golden hour light, triumphant powerful scene',
-  'Misterio':     'mysterious eerie atmosphere, fog and shadows, enigmatic scene',
+  'Terror':       'dark horror atmosphere, ominous threatening shadows, terrified expressions, cold desaturated tones, spine-chilling scene',
+  'Suspenso':     'tense suspenseful atmosphere, dramatic high contrast shadows, nervous anxious expressions, noir thriller mood',
+  'Acción':       'explosive dynamic action scene, motion energy, intense powerful expressions, adrenaline rush, vivid bright colors',
+  'Comedia':      'funny cheerful scene, exaggerated comic expressions, bright warm colors, playful joyful mood, humor visual gags',
+  'Romance':      'warm romantic tender scene, soft golden lighting, loving sweet expressions, gentle pastel colors, heartwarming mood',
+  'Drama':        'emotional dramatic scene, deep feelings, intense sorrowful or determined expression, naturalistic moody lighting',
+  'Motivacional': 'inspiring epic triumphant scene, golden hour warm light, powerful confident expression, uplifting heroic mood',
+  'Misterio':     'mysterious enigmatic atmosphere, soft fog, curious puzzled expressions, cool blue tones, intriguing strange scene',
 };
 
-async function optimizeImagePrompt({ sceneDescription, genre, style = 'comic-clasico', protagonistDescription = '' }) {
-  const preset = STYLE_PRESETS[style] || STYLE_PRESETS['comic-clasico'];
-  const mood = GENRE_MOOD[genre] || 'dramatic scene';
+const ARTIST_REF = {
+  'comic-clasico':   'by Pepo, by Hergé, comic strip aesthetic, high contrast',
+  'pantera-rosa':    'retro cartoon animation, DePatie-Freleng style, limited color palette',
+  'marvel':          'by Jim Lee, by Jack Kirby, by Neal Adams',
+  'anime':           'by Akira Toriyama, by CLAMP, Shueisha publication quality',
+  'pixar':           'Pixar Animation Studios, Renderman quality, 3D render',
+  'pop-art':         'by Roy Lichtenstein, by Andy Warhol, pop art movement',
+  'cartoon-network': 'Cartoon Network style, modern animated series',
+  'acuarela':        'by Quentin Blake, by Eric Carle, storybook illustration',
+};
 
-  // Si hay descripción del protagonista, lo ponemos como sujeto obligatorio
-  const protagonistInstruction = protagonistDescription
-    ? `CRITICAL: The MAIN CHARACTER who must appear prominently in this image is: "${protagonistDescription}". This character MUST be the central focus. Describe this exact character in detail in your prompt.`
-    : 'Create a specific detailed character appropriate for the scene.';
+function buildImagePrompt({ sceneDescription, genre, style = 'comic-clasico', protagonistDescription = '' }) {
+  const mood    = GENRE_MOOD[genre]        || 'dramatic scene';
+  const artStyle = STYLE_PRESETS[style]    || STYLE_PRESETS['comic-clasico'];
+  const artist   = ARTIST_REF[style]       || '';
 
-  const systemPrompt = `You are a world-class AI image prompt engineer. You create perfect prompts for FLUX and Stable Diffusion that generate exactly what is requested.
+  // El protagonista se inyecta LITERALMENTE como sujeto principal
+  const protagonist = protagonistDescription
+    ? protagonistDescription.trim()
+    : 'main character';
 
-TASK: Create ONE image prompt in English for this scene.
+  // Estructura: GÉNERO primero → ESTILO → PROTAGONISTA (quién es + qué hace en la escena) → ESCENA → ARTISTA → CALIDAD
+  const parts = [
+    mood,
+    artStyle,
+    `${protagonist}, ${sceneDescription}`,
+    artist,
+    'full body shot, dramatic composition',
+    'masterpiece, best quality, highly detailed, sharp focus, ultra detailed',
+  ];
 
-SCENE TO VISUALIZE: "${sceneDescription}"
-ART STYLE: ${preset.base}
-GENRE MOOD: ${mood}
-${protagonistInstruction}
-
-OUTPUT FORMAT — comma-separated keywords only, NO sentences, NO explanations:
-[art style keywords], [protagonist: specific appearance, clothing, expression, action], [scene background and environment], [${preset.artist}], [camera angle: full body/close-up/wide shot], [lighting], [quality: masterpiece, best quality, ultra detailed, sharp]
-
-RULES:
-- English only
-- 70-100 words
-- Protagonist description MUST come right after the style keywords
-- Be hyper-specific (not "man" but "tall elderly man with white beard, brown coat, round glasses, terrified expression")
-- Output ONLY the prompt, nothing else:`;
-
-  const result = await chat([{ role: 'user', content: systemPrompt }], { temperature: 0.5, max_tokens: 250 });
-  return result.trim().replace(/^["']|["']$/g, '').replace(/\n/g, ', ');
+  return parts.filter(Boolean).join(', ');
 }
 
-module.exports = { optimizeImagePrompt, STYLE_PRESETS };
+module.exports = { buildImagePrompt, STYLE_PRESETS };

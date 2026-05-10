@@ -83,12 +83,12 @@ export default function Pipeline() {
   async function runImages() {
     const scenes = s.script?.scenes || [];
     const total = Math.min(scenes.length, 3);
-    set({ loading: true, loadingMsg: `Optimizando prompt de escena 1...`, error: '', images: [] });
+    set({ loading: true, loadingMsg: `Generando imagen 1 de ${total}...`, error: '', images: [] });
     const results = [];
     for (let i = 0; i < total; i++) {
       set({ loadingMsg: `Generando imagen ${i + 1} de ${total} — puede tardar 20s...` });
-      // Delay entre imágenes para respetar rate limits de Together AI
-      if (i > 0) await new Promise(r => setTimeout(r, 3000));
+      // Delay entre imágenes — Together AI free tiene rate limit estricto
+      if (i > 0) await new Promise(r => setTimeout(r, 8000));
       let success = false;
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
