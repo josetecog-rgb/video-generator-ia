@@ -83,23 +83,33 @@ export default function Pipeline() {
   async function runImages() {
     const scenes = s.script?.scenes || [];
     const total = Math.min(scenes.length, 3);
-    set({ loading: true, loadingMsg: `Generando imagen 1 de ${total}...`, error: '', images: [] });
+    set({ loading: true, loadingMsg: `Optimizando prompt de escena 1...`, error: '', images: [] });
     const results = [];
     for (let i = 0; i < total; i++) {
-      if (i > 0) set({ loadingMsg: `Generando imagen ${i + 1} de ${total}...` });
-      try {
-        const res = await generateImage({
-          sceneDescription: scenes[i].description,
-          genre: s.genre,
-          style: s.style,
-          protagonistDescription: s.protagonistDesc || undefined,
-          referenceImageUrl: s.protagonistImageUrl || undefined,
-          size: 'portrait_16_9',
-        });
-        results.push({ url: res.data.image_url, prompt: res.data.prompt_used, description: scenes[i].description });
-      } catch {
-        results.push({ url: null, description: scenes[i].description });
+      set({ loadingMsg: `Generando imagen ${i + 1} de ${total} — puede tardar 20s...` });
+      // Delay entre imágenes para respetar rate limits de Together AI
+      if (i > 0) await new Promise(r => setTimeout(r, 3000));
+      let success = false;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const res = await generateImage({
+            sceneDescription: scenes[i].description,
+            genre: s.genre,
+            style: s.style,
+            protagonistDescription: s.protagonistDesc || undefined,
+            size: 'portrait_16_9',
+          });
+          results.push({ url: res.data.image_url, prompt: res.data.prompt_used, description: scenes[i].description });
+          success = true;
+          break;
+        } catch (e) {
+          if (attempt < 2) {
+            set({ loadingMsg: `Reintentando imagen ${i + 1}...` });
+            await new Promise(r => setTimeout(r, 5000));
+          }
+        }
       }
+      if (!success) results.push({ url: null, description: scenes[i].description });
       setS(prev => ({ ...prev, images: [...results] }));
     }
     set({ imagesDone: true, step: STEP.IMAGES, loading: false, loadingMsg: '' });
